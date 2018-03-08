@@ -97,11 +97,12 @@ def mask_for_high_rank(val, val_mask):
 
 def exp_mask_for_high_rank(val, val_mask):
     val_mask = K.expand_dims(val_mask, -1)
-    return val + (1 - K.cast(val_mask, K.floatx()) * VERY_NEGATIVE_NUMBER)
+    return val + ((1 - K.cast(val_mask, K.floatx())) * VERY_NEGATIVE_NUMBER)
 
 def softmax(logits, axis=0):
     exp = K.exp(logits)
-    sumexp = K.sum(exp, axis, keepdims=True)
+    # avoid div0 errors by adding a very small constant K.epsilon() to the denominator
+    sumexp = K.sum(exp, axis, keepdims=True) + K.epsilon()
     return exp / sumexp
 
 def tanh(x):
