@@ -40,7 +40,7 @@ class MultiDimAttn(Layer):
         self.built = True
 
     def call(self, inputs, rep_mask=None):
-        rep_mask = K.cast(K.ones((K.shape(inputs)[0], K.shape(inputs)[2])), dtype='bool') if rep_mask is None else rep_mask
+        rep_mask = K.cast(K.ones((K.shape(inputs)[0], K.int_shape(inputs)[1])), dtype='bool') if rep_mask is None else rep_mask
         rep_tensor = inputs
 
         map1 = K.dot(rep_tensor, self.map1_kernel) + self.map1_bias
@@ -123,7 +123,7 @@ class DirectionalAttn(Layer):
         self.built = True
 
     def call(self, inputs, rep_mask=None):
-        rep_mask = K.cast(K.ones((K.shape(inputs)[0], K.shape(inputs)[2])),
+        rep_mask = K.cast(K.ones((K.shape(inputs)[0], K.int_shape(inputs)[1])),
                           dtype='bool') if rep_mask is None else rep_mask
         rep_tensor = inputs
 
@@ -154,7 +154,6 @@ class DirectionalAttn(Layer):
         rep_map_dp = Dropout(1 - self.keep_prob)(rep_map)
 
         # attention
-        #dependent = Dense(ivec, use_bias=False, activation=None)(rep_map_dp)
         dependent = K.dot(rep_map_dp, self.dependent_kernel)
         head = K.dot(rep_map_dp, self.head_kernel)
 
@@ -182,21 +181,42 @@ class DirectionalAttn(Layer):
         return input_shape # bs, sl, vec
 
 if __name__ == '__main__':
-    from keras.layers import Input, Concatenate
+    from keras.layers import Input, Concatenate, Dense, Reshape
     from keras.models import Model
+    import numpy as np
 
     b, t, n = 5, 10, 256
 
-    rep_tensor = Input(shape=(t, n))
-    rep_mask = Input(shape=(t,), dtype='bool')
+    ts_input = Input(shape=(t, ))
+    ts = Reshape((t, 1))(ts_input)
 
-    f_attn = DirectionalAttn(direction='forward')(rep_tensor, rep_mask=rep_mask)
-    b_attn = DirectionalAttn(direction='backward')(rep_tensor, rep_mask=rep_mask)
+    rep_tensor = Dense(n)(ts)
+    #rep_mask = Input(shape=(t,), dtype='bool')
+
+    f_attn = DirectionalAttn(direction='forward')(rep_tensor)
+    b_attn = DirectionalAttn(direction='backward')(rep_tensor)
 
     rep_3d = Concatenate(axis=-1)([f_attn, b_attn])
 
-    rep_2d = MultiDimAttn()(rep_3d, rep_mask=rep_mask)
+    rep_2d = MultiDimAttn()(rep_3d)
 
-    model = Model(rep_tensor, rep_2d)
+    output = Dense(1, activation='linear')(rep_2d)
 
+    model = Model(ts_input, output)
+    model.compile(loss='mse', optimizer='adam', metrics=['mae'])
     model.summary()
+
+    ts = np.arange(1000).astype(np.float32)
+
+    X, y = [], []
+    for i in range(len(ts)):
+        if i >= t:
+            X.append(ts[i-t:i])
+            y.append(ts[i])
+
+    X, y = np.asarray(X), np.asarray(y)
+
+    print(X.shape, y.shape)
+
+    model.fit(X, y, validation_split=0.1, epochs=5)
+
