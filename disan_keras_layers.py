@@ -1,9 +1,8 @@
 import keras.backend as K
-from keras.layers import Layer, Activation, Dropout, BatchNormalization
-from disan_keras import exp_mask_for_high_rank, mask_for_high_rank, softmax, meshgrid, scaled_tanh
+from keras.layers import Layer, Activation, Dropout, BatchNormalization, Dense, Concatenate
+from disan_keras import exp_mask_for_high_rank, mask_for_high_rank, softmax, meshgrid, scaled_tanh, get_attn, plot_attn
 from collections import OrderedDict
 import tensorflow as tf
-import matplotlib.pyplot as plt
 
 def tf_print(x, message=''):
     message += ':{}\t'.format(K.int_shape(x))
@@ -271,34 +270,8 @@ class DISAN(Layer):
             self.output_dim = input_shape[-1]*2
         return (input_shape[0], self.output_dim)
 
-
-def get_attn(input, model, attn_tensors_dict, keys=[]):
-    assert len(attn_tensors_dict) > 0
-    if len(keys) == 0:
-        keys = list(attn_tensors_dict.keys())
-    nsamples = len(input.shape)
-    if nsamples == 1:
-        input = input[np.newaxis, ...]
-    attn_func = K.function([model.layers[0].input, K.learning_phase()],
-                           [v for k, v in attn_tensors_dict.items() if k in keys])
-    attn = attn_func([input, 0])
-    if nsamples > 1:
-        return {k: v for k, v in zip(keys, attn)}
-    else:
-        return {k: v[0] for k, v in zip(keys, attn)}
-
-
-def plot_attn(attn_dict_np, figsize=(8, 6)):
-    attn_full = attn_dict_np['forward_attn_full'].mean(axis=-1) + attn_dict_np['backward_attn_full'].mean(axis=-1)
-    f, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=figsize)
-    ax1.imshow(attn_full, cmap=plt.get_cmap('Greys'))
-    ax2.imshow(attn_dict_np['forward_attn_fusion'].mean(axis=-1, keepdims=True).T, cmap=plt.get_cmap('Greys'))
-    ax3.imshow(attn_dict_np['backward_attn_fusion'].mean(axis=-1, keepdims=True).T, cmap=plt.get_cmap('Greys'))
-    ax4.imshow(attn_dict_np['multidim_attn'].mean(axis=-1, keepdims=True).T, cmap=plt.get_cmap('Greys'))
-    plt.show()
-
 if __name__ == '__main__':
-    from keras.layers import Input, Concatenate, Dense, Reshape
+    from keras.layers import Input, Reshape
     from keras.models import Model
     from keras.optimizers import Adadelta
     from keras.callbacks import ReduceLROnPlateau, ModelCheckpoint, EarlyStopping, TensorBoard

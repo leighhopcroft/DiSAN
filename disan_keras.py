@@ -1,6 +1,6 @@
 import keras.backend as K
 from keras.layers import Dense, Dropout, BatchNormalization, Activation, Lambda, Multiply, Masking
-import tensorflow as tf
+import matplotlib.pyplot as plt
 import numpy as np
 
 VERY_BIG_NUMBER = 1e30
@@ -22,7 +22,6 @@ def disan(rep_tensor, rep_mask, keep_prob=1., activation='elu'):
     return sent_rep
 
 def directional_attention_with_dense(rep_tensor, rep_mask, direction=None, keep_prob=1., activation='elu'):
-
     _, isl, ivec = K.int_shape(rep_tensor)
     bs = K.shape(rep_tensor)[0]
 
@@ -134,6 +133,31 @@ def meshgrid(*args):
 
 def size(x):
     return np.prod(K.int_shape(x))
+
+def get_attn(input, model, attn_tensors_dict, keys=[]):
+    assert len(attn_tensors_dict) > 0
+    if len(keys) == 0:
+        keys = list(attn_tensors_dict.keys())
+    nsamples = len(input.shape)
+    if nsamples == 1:
+        input = input[np.newaxis, ...]
+    attn_func = K.function([model.layers[0].input, K.learning_phase()],
+                           [v for k, v in attn_tensors_dict.items() if k in keys])
+    attn = attn_func([input, 0])
+    if nsamples == 1 or input.shape[0] == 1:
+        return {k: v[0] for k, v in zip(keys, attn)}
+    else:
+        return {k: v for k, v in zip(keys, attn)}
+
+
+def plot_attn(attn_dict_np, figsize=(8, 6)):
+    attn_full = attn_dict_np['forward_attn_full'].mean(axis=-1) + attn_dict_np['backward_attn_full'].mean(axis=-1)
+    f, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=figsize)
+    ax1.imshow(attn_full, cmap=plt.get_cmap('Greys'))
+    ax2.imshow(attn_dict_np['forward_attn_fusion'].mean(axis=-1, keepdims=True).T, cmap=plt.get_cmap('Greys'))
+    ax3.imshow(attn_dict_np['backward_attn_fusion'].mean(axis=-1, keepdims=True).T, cmap=plt.get_cmap('Greys'))
+    ax4.imshow(attn_dict_np['multidim_attn'].mean(axis=-1, keepdims=True).T, cmap=plt.get_cmap('Greys'))
+    plt.show()
 
 if __name__ == '__main__':
     from keras.layers import Input
